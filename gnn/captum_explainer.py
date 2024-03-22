@@ -8,6 +8,8 @@ import torch_geometric.transforms as T
 from torch_geometric.explain import CaptumExplainer, Explainer
 from torch_geometric.nn import SAGEConv, to_hetero
 
+from relbench.external.graph import get_node_train_table_input, make_pkey_fkey_graph
+
 MOVIE_HEADERS = [
     "movieId", "title", "releaseDate", "videoReleaseDate", "IMDb URL",
     "unknown", "Action", "Adventure", "Animation", "Children's", "Comedy",
