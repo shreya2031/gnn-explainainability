@@ -10,6 +10,18 @@ from torch_geometric.nn import SAGEConv, to_hetero
 
 from relbench.external.graph import get_node_train_table_input, make_pkey_fkey_graph
 
+import os
+import os.path as osp
+from typing import Callable, List, Optional
+
+from torch_geometric.data import (
+    HeteroData,
+    InMemoryDataset,
+    download_url,
+    extract_zip,
+)
+from torch_geometric.io import fs
+
 MOVIE_HEADERS = [
     "movieId", "title", "releaseDate", "videoReleaseDate", "IMDb URL",
     "unknown", "Action", "Adventure", "Animation", "Children's", "Comedy",
