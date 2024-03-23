@@ -1,6 +1,15 @@
+import os
 import os.path as osp
+from typing import Callable, List, Optional
 
 import torch
+from torch_geometric.data import (
+    HeteroData,
+    InMemoryDataset,
+    download_url,
+    extract_zip,
+)
+from torch_geometric.io import fs
 import torch.nn.functional as F
 from torch.nn import Linear
 
@@ -9,18 +18,6 @@ from torch_geometric.explain import CaptumExplainer, Explainer
 from torch_geometric.nn import SAGEConv, to_hetero
 
 from relbench.external.graph import get_node_train_table_input, make_pkey_fkey_graph
-
-import os
-import os.path as osp
-from typing import Callable, List, Optional
-
-from torch_geometric.data import (
-    HeteroData,
-    InMemoryDataset,
-    download_url,
-    extract_zip,
-)
-from torch_geometric.io import fs
 
 MOVIE_HEADERS = [
     "movieId", "title", "releaseDate", "videoReleaseDate", "IMDb URL",
@@ -32,7 +29,7 @@ USER_HEADERS = ["userId", "age", "gender", "occupation", "zipCode"]
 RATING_HEADERS = ["userId", "movieId", "rating", "timestamp"]
 
 
-class MovieLens100K(InMemoryDataset):
+class MovieLens(InMemoryDataset):
     url = 'https://files.grouplens.org/datasets/movielens/ml-100k.zip'
 
     def __init__(
@@ -147,21 +144,107 @@ class MovieLens100K(InMemoryDataset):
 
         self.save([data], self.processed_paths[0])
 
+import os
+import os.path as osp
+from typing import Callable, List, Optional
+
+import torch
+
+from torch_geometric.data import (
+    HeteroData,
+    InMemoryDataset,
+    download_url,
+    extract_zip,
+)
+
+
+class MovieLensData(InMemoryDataset):
+
+    url = 'https://files.grouplens.org/datasets/movielens/ml-latest-small.zip'
+
+    def __init__(
+        self,
+        root: str,
+        transform: Optional[Callable] = None,
+        pre_transform: Optional[Callable] = None,
+        model_name: Optional[str] = 'all-MiniLM-L6-v2',
+        force_reload: bool = False,
+    ) -> None:
+        self.model_name = model_name
+        super().__init__(root, transform, pre_transform,
+                         force_reload=force_reload)
+        self.load(self.processed_paths[0], data_cls=HeteroData)
+
+    @property
+    def raw_file_names(self) -> List[str]:
+        return [
+            osp.join('ml-latest-small', 'movies.csv'),
+            osp.join('ml-latest-small', 'ratings.csv'),
+        ]
+
+    @property
+    def processed_file_names(self) -> str:
+        return f'data_{self.model_name}.pt'
+
+    def download(self) -> None:
+        path = download_url(self.url, self.raw_dir)
+        extract_zip(path, self.raw_dir)
+        os.remove(path)
+
+    def process(self) -> None:
+        import pandas as pd
+        from sentence_transformers import SentenceTransformer
+
+        data = HeteroData()
+
+        df = pd.read_csv(self.raw_paths[0], index_col='movieId')
+        movie_mapping = {idx: i for i, idx in enumerate(df.index)}
+
+        genres = df['genres'].str.get_dummies('|').values
+        genres = torch.from_numpy(genres).to(torch.float)
+
+        model = SentenceTransformer(self.model_name)
+        with torch.no_grad():
+            emb = model.encode(df['title'].values, show_progress_bar=True,
+                               convert_to_tensor=True).cpu()
+
+        data['movie'].x = torch.cat([emb, genres], dim=-1)
+
+        df = pd.read_csv(self.raw_paths[1])
+        user_mapping = {idx: i for i, idx in enumerate(df['userId'].unique())}
+        data['user'].num_nodes = len(user_mapping)
+
+        src = [user_mapping[idx] for idx in df['userId']]
+        dst = [movie_mapping[idx] for idx in df['movieId']]
+        edge_index = torch.tensor([src, dst])
+
+        rating = torch.from_numpy(df['rating'].values).to(torch.long)
+        time = torch.from_numpy(df['timestamp'].values).to(torch.long)
+
+        data['user', 'rates', 'movie'].edge_index = edge_index
+        data['user', 'rates', 'movie'].edge_label = rating
+        data['user', 'rates', 'movie'].time = time
+
+        if self.pre_transform is not None:
+            data = self.pre_transform(data)
+
+        self.save([data], self.processed_paths[0])
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-dataset = MovieLens100K(root='./movie_lens_data',model_name='all-MiniLM-L6-v2')
+dataset = MovieLensData(root='./movie_lens', model_name='all-MiniLM-L6-v2')
 data = dataset[0].to(device)
 
 # Add user node features for message passing:
 data['user'].x = torch.eye(data['user'].num_nodes, device=device)
 del data['user'].num_nodes
 
-# Add a reverse ('movie', 'rev_rates', 'user') relation for message passing:
+# Adding a reverse ('movie', 'rev_rates', 'user') relation for message passing:
 data = T.ToUndirected()(data)
-data['user', 'movie'].edge_label = data['user',
-                                        'movie'].edge_label.to(torch.float)
+print(data)
+data['user', 'movie'].edge_label = data['user','movie'].edge_label.to(torch.float)
 del data['movie', 'rev_rates', 'user'].edge_label  # Remove "reverse" label.
 
-# Perform a link-level split into training, validation, and test edges:
+# Performing a link-level split into training, validation, and test edges:
 data, _, _ = T.RandomLinkSplit(
     num_val=0.1,
     num_test=0.1,
@@ -231,8 +314,7 @@ for epoch in range(1, 10):
     loss.backward()
     optimizer.step()
 
-# Define explainers using the 4 attribution methods
-
+# Defining explainers using the 4 attribution methods
 explainer_ig = Explainer(
     model=model,
     algorithm=CaptumExplainer('IntegratedGradients'),
@@ -300,7 +382,7 @@ explainer_gbp = Explainer(
 )
 
 # Explain edge labels with index 2 and 10.
-index = torch.tensor([2, 10])  
+index = torch.tensor([2, 10])
 
 # Generate explanations
 explanation_ig = explainer_ig(
