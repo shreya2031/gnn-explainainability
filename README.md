@@ -11,7 +11,7 @@ It is recommended to run on Datahub instance since some of the packages might no
 gnn/captum_explainer.py contains the implementation of GNN model and the explainer for all four attribution methods methods. The remaining folders are helpers.
 The file generates visualizations for the feature importance using each of the methods.
 Guided Backpropagation: 
-![alt text](https://github.com/shreya2031/gnn-explainainability/tree/main/results/feature_importance_ GuidedBackprop.png "Guided Backpropagation")
+![alt text](https://github.com/shreya2031/gnn-explainainability/tree/main/results/feature_importance_ GuidedBackprop.png)
 
 ## Future Work
 1. PyTorch Geomtric does not yet support Captum evaluation metrics to evaluate the truthfulness of the explanations for regression tasks. 
