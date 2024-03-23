@@ -144,80 +144,80 @@ class MovieLens(InMemoryDataset):
 
         self.save([data], self.processed_paths[0])
 
-# class MovieLensData(InMemoryDataset):
+class MovieLensData(InMemoryDataset):
 
-#     url = 'https://files.grouplens.org/datasets/movielens/ml-latest-small.zip'
+    url = 'https://files.grouplens.org/datasets/movielens/ml-latest-small.zip'
 
-#     def __init__(
-#         self,
-#         root: str,
-#         transform: Optional[Callable] = None,
-#         pre_transform: Optional[Callable] = None,
-#         model_name: Optional[str] = 'all-MiniLM-L6-v2',
-#         force_reload: bool = False,
-#     ) -> None:
-#         self.model_name = model_name
-#         super().__init__(root, transform, pre_transform,
-#                          force_reload=force_reload)
-#         self.load(self.processed_paths[0], data_cls=HeteroData)
+    def __init__(
+        self,
+        root: str,
+        transform: Optional[Callable] = None,
+        pre_transform: Optional[Callable] = None,
+        model_name: Optional[str] = 'all-MiniLM-L6-v2',
+        force_reload: bool = False,
+    ) -> None:
+        self.model_name = model_name
+        super().__init__(root, transform, pre_transform,
+                         force_reload=force_reload)
+        self.load(self.processed_paths[0], data_cls=HeteroData)
 
-#     @property
-#     def raw_file_names(self) -> List[str]:
-#         return [
-#             osp.join('ml-latest-small', 'movies.csv'),
-#             osp.join('ml-latest-small', 'ratings.csv'),
-#         ]
+    @property
+    def raw_file_names(self) -> List[str]:
+        return [
+            osp.join('ml-latest-small', 'movies.csv'),
+            osp.join('ml-latest-small', 'ratings.csv'),
+        ]
 
-    # @property
-    # def processed_file_names(self) -> str:
-    #     return f'data_{self.model_name}.pt'
+    @property
+    def processed_file_names(self) -> str:
+        return f'data_{self.model_name}.pt'
 
-    # def download(self) -> None:
-    #     path = download_url(self.url, self.raw_dir)
-    #     extract_zip(path, self.raw_dir)
-    #     os.remove(path)
+    def download(self) -> None:
+        path = download_url(self.url, self.raw_dir)
+        extract_zip(path, self.raw_dir)
+        os.remove(path)
 
-    # def process(self) -> None:
-    #     import pandas as pd
-    #     from sentence_transformers import SentenceTransformer
+    def process(self) -> None:
+        import pandas as pd
+        from sentence_transformers import SentenceTransformer
 
-    #     data = HeteroData()
+        data = HeteroData()
 
-    #     df = pd.read_csv(self.raw_paths[0], index_col='movieId')
-    #     movie_mapping = {idx: i for i, idx in enumerate(df.index)}
+        df = pd.read_csv(self.raw_paths[0], index_col='movieId')
+        movie_mapping = {idx: i for i, idx in enumerate(df.index)}
 
-    #     genres = df['genres'].str.get_dummies('|').values
-    #     genres = torch.from_numpy(genres).to(torch.float)
+        genres = df['genres'].str.get_dummies('|').values
+        genres = torch.from_numpy(genres).to(torch.float)
 
-    #     model = SentenceTransformer(self.model_name)
-    #     with torch.no_grad():
-    #         emb = model.encode(df['title'].values, show_progress_bar=True,
-    #                            convert_to_tensor=True).cpu()
+        model = SentenceTransformer(self.model_name)
+        with torch.no_grad():
+            emb = model.encode(df['title'].values, show_progress_bar=True,
+                               convert_to_tensor=True).cpu()
 
-        # data['movie'].x = torch.cat([emb, genres], dim=-1)
+        data['movie'].x = torch.cat([emb, genres], dim=-1)
 
-        # df = pd.read_csv(self.raw_paths[1])
-        # user_mapping = {idx: i for i, idx in enumerate(df['userId'].unique())}
-        # data['user'].num_nodes = len(user_mapping)
+        df = pd.read_csv(self.raw_paths[1])
+        user_mapping = {idx: i for i, idx in enumerate(df['userId'].unique())}
+        data['user'].num_nodes = len(user_mapping)
 
-        # src = [user_mapping[idx] for idx in df['userId']]
-        # dst = [movie_mapping[idx] for idx in df['movieId']]
-        # edge_index = torch.tensor([src, dst])
+        src = [user_mapping[idx] for idx in df['userId']]
+        dst = [movie_mapping[idx] for idx in df['movieId']]
+        edge_index = torch.tensor([src, dst])
 
-        # rating = torch.from_numpy(df['rating'].values).to(torch.long)
-        # time = torch.from_numpy(df['timestamp'].values).to(torch.long)
+        rating = torch.from_numpy(df['rating'].values).to(torch.long)
+        time = torch.from_numpy(df['timestamp'].values).to(torch.long)
 
-        # data['user', 'rates', 'movie'].edge_index = edge_index
-        # data['user', 'rates', 'movie'].edge_label = rating
-        # data['user', 'rates', 'movie'].time = time
+        data['user', 'rates', 'movie'].edge_index = edge_index
+        data['user', 'rates', 'movie'].edge_label = rating
+        data['user', 'rates', 'movie'].time = time
 
-        # if self.pre_transform is not None:
-        #     data = self.pre_transform(data)
+        if self.pre_transform is not None:
+            data = self.pre_transform(data)
 
-        # self.save([data], self.processed_paths[0])
+        self.save([data], self.processed_paths[0])
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-dataset = MovieLens(root='./movie_lens')
+dataset = MovieLensData(root='./movie_lens')
 data = dataset[0].to(device)
 
 # Add user node features for message passing:
@@ -397,10 +397,10 @@ explanation_gbp = explainer_gbp(
 )
 
 
-path1 = 'feature_importance_ig.png'
-path2 = 'feature_importance_sal.png'
-path3 = 'feature_importance_deconv.png'
-path4 = 'feature_importance_gbp.png'
+path1 = './results/feature_importance_IntegratedGradients.png'
+path2 = './results/feature_importance_saliency.png'
+path3 = './results/feature_importance_Deconvolution.png'
+path4 = './results/feature_importance_GuidedBackprop.png'
 
 # Visualize the feature importance
 explanation_ig.visualize_feature_importance(path1, top_k=10)
